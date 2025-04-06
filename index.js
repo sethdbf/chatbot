@@ -74,13 +74,19 @@ app.post("/chat", async (req, res) => {
     const emailOrPhoneMatches = req.body.message.match(contactRegex);
     const nameMatch = req.body.message.match(nameRegex);
 
-    if (emailOrPhoneMatches || nameMatch) {
+    const emailMatch = emailOrPhoneMatches?.find(e => e.includes('@')) || null;
+    const phoneMatch = emailOrPhoneMatches?.find(e => /\d{3}/.test(e)) || null;
+    const name = nameMatch ? nameMatch[2] : null;
+
+    if (emailMatch || phoneMatch || name) {
       const payload = {
         event: "contact_info_captured",
         user_message: req.body.message,
         assistant_reply: replyText,
-        contacts_detected: emailOrPhoneMatches || [],
-        name_detected: nameMatch ? nameMatch[2] : null
+        name_detected: name,
+        email_detected: emailMatch,
+        phone_detected: phoneMatch,
+        raw_contacts: emailOrPhoneMatches || []
       };
 
       try {
