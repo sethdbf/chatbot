@@ -1,6 +1,18 @@
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+require("dotenv").config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const PORT = process.env.PORT || 3001;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
 app.post("/chat", async (req, res) => {
   const headers = {
-    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    Authorization: `Bearer ${OPENAI_API_KEY}`,
     "Content-Type": "application/json",
   };
 
@@ -57,4 +69,8 @@ app.post("/chat", async (req, res) => {
     console.error("OpenAI Assistants error:", err.response?.data || err.message);
     res.status(500).json({ error: "Chatbot failed to respond." });
   }
+});
+
+app.listen(PORT, () => {
+  console.log(`✅ Dunbridge chatbot running on port ${PORT}`);
 });
