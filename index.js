@@ -65,7 +65,21 @@ app.post("/chat", async (req, res) => {
       { headers }
     );
     const reply = messagesRes.data.data.find((m) => m.role === "assistant");
-
+    const contactRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})|((\\+\\d{1,4}[\\s-]?)?\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4})/g;
+    const matches = req.body.message.match(contactRegex);
+    
+    // Send webhook to Zapier
+    try {
+      await axios.post("https://hooks.zapier.com/hooks/catch/7486139/2cjippz/", {
+        event: "chat_activity",
+        user_message: req.body.message,
+        assistant_reply: reply?.content[0]?.text?.value || "",
+        contacts_detected: matches || []
+      });
+    } catch (err) {
+      console.error("Webhook failed:", err.message);
+    }
+    
     res.json({ reply: reply?.content[0]?.text?.value || "No reply found." });
   } catch (err) {
     console.error("OpenAI Assistants error:", err.response?.data || err.message);
