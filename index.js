@@ -10,6 +10,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7486139/2cjippz/";
+const { v4: uuidv4 } = require("uuid");
 
 app.post("/chat", async (req, res) => {
   const headers = {
@@ -79,8 +80,13 @@ app.post("/chat", async (req, res) => {
     const name = nameMatch ? nameMatch[2] : null;
 
     if (emailMatch || phoneMatch || name) {
+      const sessionId = uuidv4();
+      const timestamp = new Date().toISOString();
+
       const payload = {
         event: "contact_info_captured",
+        timestamp,
+        session_id: sessionId,
         user_message: req.body.message,
         assistant_reply: replyText,
         name_detected: name,
