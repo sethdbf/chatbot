@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
 require("dotenv").config();
+const { v4: uuidv4 } = require("uuid");
 
 const app = express();
 app.use(cors());
@@ -10,7 +11,6 @@ app.use(express.json());
 const PORT = process.env.PORT || 3001;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/7486139/2cjippz/";
-const { v4: uuidv4 } = require("uuid");
 
 app.post("/chat", async (req, res) => {
   const headers = {
@@ -68,31 +68,44 @@ app.post("/chat", async (req, res) => {
     const reply = messagesRes.data.data.find((m) => m.role === "assistant");
     const replyText = reply?.content[0]?.text?.value || "No reply found.";
 
-    // Step 6: Detect contact info and fire webhook if present
-    const contactRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})|((\+\d{1,4}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/g;
-    const nameRegex = /(my name is|I am|I'm|this is)\s+([A-Z][a-z]+\s?[A-Z]?[a-z]*)/i;
+    // Step 6: Use GPT to extract structured contact info
+    const extractionPrompt = `Extract name, email, phone number, and company (if mentioned) from this message and return as JSON. Example: {\"name\":\"John Smith\",\"email\":\"john@example.com\",\"phone\":\"+15551234567\",\"company\":\"Acme Corp\"}
 
-    const emailOrPhoneMatches = req.body.message.match(contactRegex);
-    const nameMatch = req.body.message.match(nameRegex);
+Message: ${req.body.message}`;
 
-    const emailMatch = emailOrPhoneMatches?.find(e => e.includes('@')) || null;
-    const phoneMatch = emailOrPhoneMatches?.find(e => /\d{3}/.test(e)) || null;
-    const name = nameMatch ? nameMatch[2] : null;
+    const contactExtractionRes = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4-1106-preview",
+        messages: [
+          { role: "system", content: "You are a contact info extractor." },
+          { role: "user", content: extractionPrompt }
+        ]
+      },
+      { headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      }}
+    );
 
-    if (emailMatch || phoneMatch || name) {
-      const sessionId = uuidv4();
-      const timestamp = new Date().toISOString();
+    let contactJSON;
+    try {
+      contactJSON = JSON.parse(contactExtractionRes.data.choices[0].message.content);
+    } catch {
+      contactJSON = { name: null, email: null, phone: null, company: null };
+    }
 
+    if (contactJSON.name || contactJSON.email || contactJSON.phone || contactJSON.company) {
       const payload = {
         event: "contact_info_captured",
-        timestamp,
-        session_id: sessionId,
+        timestamp: new Date().toISOString(),
+        session_id: uuidv4(),
         user_message: req.body.message,
         assistant_reply: replyText,
-        name_detected: name,
-        email_detected: emailMatch,
-        phone_detected: phoneMatch,
-        raw_contacts: emailOrPhoneMatches || []
+        name_detected: contactJSON.name,
+        email_detected: contactJSON.email,
+        phone_detected: contactJSON.phone,
+        company_detected: contactJSON.company
       };
 
       try {
