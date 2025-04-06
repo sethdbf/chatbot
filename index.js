@@ -67,21 +67,31 @@ app.post("/chat", async (req, res) => {
     const reply = messagesRes.data.data.find((m) => m.role === "assistant");
     const replyText = reply?.content[0]?.text?.value || "No reply found.";
 
-    // Step 6: Detect contact info and fire webhook
+    // Step 6: Detect contact info and fire webhook if present
     const contactRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})|((\+\d{1,4}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/g;
-    const matches = req.body.message.match(contactRegex);
+    const nameRegex = /(my name is|I am|I'm|this is)\s+([A-Z][a-z]+\s?[A-Z]?[a-z]*)/i;
 
-    try {
-      await axios.post(WEBHOOK_URL, {
-        event: "chat_activity",
+    const emailOrPhoneMatches = req.body.message.match(contactRegex);
+    const nameMatch = req.body.message.match(nameRegex);
+
+    if (emailOrPhoneMatches || nameMatch) {
+      const payload = {
+        event: "contact_info_captured",
         user_message: req.body.message,
         assistant_reply: replyText,
-        contacts_detected: matches || []
-      });
-    } catch (err) {
-      console.error("Webhook failed:", err.message);
+        contacts_detected: emailOrPhoneMatches || [],
+        name_detected: nameMatch ? nameMatch[2] : null
+      };
+
+      try {
+        await axios.post(WEBHOOK_URL, payload);
+        console.log("🔔 Webhook fired with:", payload);
+      } catch (err) {
+        console.error("Webhook failed:", err.message);
+      }
     }
 
+    // Step 7: Return response to frontend
     res.json({ reply: replyText });
   } catch (err) {
     console.error("Chatbot error:", err.response?.data || err.message);
